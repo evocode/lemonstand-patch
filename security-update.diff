@@ -1,0 +1,2273 @@
+From fd982fb6d716cd327d11e71b81cd052447a2914b Mon Sep 17 00:00:00 2001
+From: patrickheeney <hi@evocode.com>
+Date: Mon, 24 Jul 2016 19:52:21 -0700
+Subject: [PATCH] Security update
+
+---
+ modules/core/updates/jda823j2.php                  |  60 +++++
+ modules/core/updates/version.dat                   |   3 +-
+ phproad/modules/phpr/classes/phpr_response.php     |  42 +---
+ phproad/modules/phpr/classes/phpr_security.php     |   4 +-
+ .../phpr/classes/phpr_securityframework.php        |  20 ++
+ phproad/system/initialize.php                      |   8 +-
+ phproad/thirdpart/random_compat/CHANGELOG.md       | 260 +++++++++++++++++++++
+ phproad/thirdpart/random_compat/ERRATA.md          |  34 +++
+ phproad/thirdpart/random_compat/LICENSE            |  22 ++
+ phproad/thirdpart/random_compat/README.md          | 176 ++++++++++++++
+ phproad/thirdpart/random_compat/SECURITY.md        | 108 +++++++++
+ phproad/thirdpart/random_compat/build-phar.sh      |   5 +
+ phproad/thirdpart/random_compat/composer.json      |  35 +++
+ .../random_compat/dist/random_compat.phar.pubkey   |   5 +
+ .../dist/random_compat.phar.pubkey.asc             |  11 +
+ .../random_compat/lib/byte_safe_strings.php        | 181 ++++++++++++++
+ .../thirdpart/random_compat/lib/cast_to_int.php    |  71 ++++++
+ .../thirdpart/random_compat/lib/error_polyfill.php |  42 ++++
+ phproad/thirdpart/random_compat/lib/random.php     | 197 ++++++++++++++++
+ .../random_compat/lib/random_bytes_com_dotnet.php  |  81 +++++++
+ .../random_compat/lib/random_bytes_dev_urandom.php | 148 ++++++++++++
+ .../random_compat/lib/random_bytes_libsodium.php   |  86 +++++++
+ .../lib/random_bytes_libsodium_legacy.php          |  86 +++++++
+ .../random_compat/lib/random_bytes_mcrypt.php      |  76 ++++++
+ phproad/thirdpart/random_compat/lib/random_int.php | 191 +++++++++++++++
+ .../thirdpart/random_compat/other/build_phar.php   |  57 +++++
+ 26 files changed, 1959 insertions(+), 50 deletions(-)
+ create mode 100644 modules/core/updates/jda823j2.php
+ create mode 100644 phproad/thirdpart/random_compat/CHANGELOG.md
+ create mode 100644 phproad/thirdpart/random_compat/ERRATA.md
+ create mode 100644 phproad/thirdpart/random_compat/LICENSE
+ create mode 100644 phproad/thirdpart/random_compat/README.md
+ create mode 100644 phproad/thirdpart/random_compat/SECURITY.md
+ create mode 100644 phproad/thirdpart/random_compat/build-phar.sh
+ create mode 100644 phproad/thirdpart/random_compat/composer.json
+ create mode 100644 phproad/thirdpart/random_compat/dist/random_compat.phar.pubkey
+ create mode 100644 phproad/thirdpart/random_compat/dist/random_compat.phar.pubkey.asc
+ create mode 100644 phproad/thirdpart/random_compat/lib/byte_safe_strings.php
+ create mode 100644 phproad/thirdpart/random_compat/lib/cast_to_int.php
+ create mode 100644 phproad/thirdpart/random_compat/lib/error_polyfill.php
+ create mode 100644 phproad/thirdpart/random_compat/lib/random.php
+ create mode 100644 phproad/thirdpart/random_compat/lib/random_bytes_com_dotnet.php
+ create mode 100644 phproad/thirdpart/random_compat/lib/random_bytes_dev_urandom.php
+ create mode 100644 phproad/thirdpart/random_compat/lib/random_bytes_libsodium.php
+ create mode 100644 phproad/thirdpart/random_compat/lib/random_bytes_libsodium_legacy.php
+ create mode 100644 phproad/thirdpart/random_compat/lib/random_bytes_mcrypt.php
+ create mode 100644 phproad/thirdpart/random_compat/lib/random_int.php
+ create mode 100644 phproad/thirdpart/random_compat/other/build_phar.php
+
+diff --git a/modules/core/updates/jda823j2.php b/modules/core/updates/jda823j2.php
+new file mode 100644
+index 0000000..22e311a
+--- /dev/null
++++ b/modules/core/updates/jda823j2.php
+@@ -0,0 +1,60 @@
++<?php
++
++require PATH_APP.'/phproad/thirdpart/random_compat/lib/random.php';
++
++function generate($bytes = 32)
++{
++  $string = '';
++
++  try {
++    $string = random_bytes(32);
++    $string = bin2hex($string);
++  } catch (TypeError $e) {
++    // die("An unexpected error has occurred");
++  } catch (Error $e) {
++    // die("An unexpected error has occurred");
++  } catch (Exception $e) {
++    // die("Could not generate a random string. Is our OS secure?");
++  }
++
++  return $string;
++}
++
++function writeFile($path, $contents)
++{
++    if ( !($fp = @fopen( $path, 'a' )) )
++      return false;
++
++    flock( $fp, LOCK_EX );
++
++    if ( !@fwrite( $fp, $contents ) )
++    {
++      fclose( $fp );
++      return false;
++    }
++
++    flock( $fp, LOCK_UN );
++    fclose( $fp );
++
++    return true;
++}
++
++$salts = array(
++  'COOKIE_SALT' => generate()
++);
++
++$config_dir = PATH_APP."/config";
++$key_file = $config_dir."/keys.php";
++
++if (file_exists($key_file)) {
++  $key_file = $config_dir."/keys_.php";
++}
++
++$template = "<?php\n\n";
++$template .= "if (!isset(\$CONFIG))\n\t\$CONFIG = array();\n\n";
++
++foreach($salts as $name => $salt) {
++  $template .= "if (!isset(\$CONFIG['".$name."']))\n\t\$CONFIG['".$name."'] = '".$salt."';\n\n";
++}
++
++writeFile($key_file, $template);
+diff --git a/modules/core/updates/version.dat b/modules/core/updates/version.dat
+index 5ad688a..d390651 100644
+--- a/modules/core/updates/version.dat
++++ b/modules/core/updates/version.dat
+@@ -456,4 +456,5 @@
+ #1.11.94 Minor update in the MySQLi driver
+ #1.11.95 Minor update in the core classes
+ #1.11.96 Minor update in the core classes
+-#1.11.97 Update in the MySQLi driver support
+\ No newline at end of file
++#1.11.97 Update in the MySQLi driver support
++#1.11.98|@jda823j2 Security update
+diff --git a/phproad/modules/phpr/classes/phpr_response.php b/phproad/modules/phpr/classes/phpr_response.php
+index e5b2ff5..573e558 100644
+--- a/phproad/modules/phpr/classes/phpr_response.php
++++ b/phproad/modules/phpr/classes/phpr_response.php
+@@ -255,51 +255,13 @@
+ 		}
+ 
+ 		/**
+-		 * @ignore
++         * @deprecated
+ 		 * This method is used by the PHP Road internally.
+ 		 * Outputs the requested Java Script resource.
+ 		 */
+ 		public static function processJavaScriptRequest()
+ 		{
+-			if ( !isset($_GET['phpr_js']) )
+-				return;
+-
+-			// Sanitize the requested resource name
+-			//
+-			if ( !preg_match("/^([a-zA-Z0-9_\.]*\.js|defaults|\|)*/", $_GET['phpr_js']) )
+-				die;
+-
+-			// Prepare the result string
+-			//
+-			$result = null;
+-
+-			foreach ( explode( "|", $_GET['phpr_js'] ) as $file )
+-			{
+-				$files = ($file == "defaults") ? self::$defaultJsScripts : array($file);
+-
+-				foreach ( $files as $file )
+-				{
+-					$filePath = PATH_SYSTEM."/javascript/".$file;
+-					if ( file_exists($filePath) )
+-						$result .= file_get_contents($filePath);
+-				}
+-			}
+-
+-			// Prepare the output buffering with compressing
+-			//
+-			if ( function_exists('ob_gzhandler') && !!ini_get('zlib.output_compression') )
+-				ob_start("ob_gzhandler");
+-
+-			// Output the headers
+-			//
+-			header("Content-type: text/javascript; charset: UTF-8");
+-			header("Vary: Accept-Encoding");
+-
+-			// Output the result string
+-			//
+-			echo $result;
+-
+-			die;
++			throw new Phpr_SystemException('Phpr_Response::processJavaScriptRequest() is depreciated.');
+ 		}
+ 	}
+ 
+diff --git a/phproad/modules/phpr/classes/phpr_security.php b/phproad/modules/phpr/classes/phpr_security.php
+index a4ed722..7bf614a 100644
+--- a/phproad/modules/phpr/classes/phpr_security.php
++++ b/phproad/modules/phpr/classes/phpr_security.php
+@@ -391,7 +391,7 @@
+ 			
+ 			$expiration = time()+$lifetime;
+ 
+-			$key = hash_hmac('md5', $Id.$expiration, Phpr_SecurityFramework::create()->salt());
++			$key = hash_hmac('md5', $Id.$expiration, Phpr_SecurityFramework::create()->salted_cookie());
+ 			$hash = hash_hmac('md5', $Id.$expiration, $key);
+ 			$ticket = base64_encode(base64_encode($Id).'|'.$expiration.'|'.$hash);
+ 
+@@ -421,7 +421,7 @@
+ 			if ( $expiration < time() )
+ 				return null;
+ 
+-			$key = hash_hmac( 'md5', $id_decoded.$expiration, Phpr_SecurityFramework::create()->salt() );
++			$key = hash_hmac( 'md5', $id_decoded.$expiration, Phpr_SecurityFramework::create()->salted_cookie() );
+ 			$hash = hash_hmac( 'md5', $id_decoded.$expiration, $key );
+ 
+ 			if ( $hmac != $hash )
+diff --git a/phproad/modules/phpr/classes/phpr_securityframework.php b/phproad/modules/phpr/classes/phpr_securityframework.php
+index 92012d4..4c10a2f 100644
+--- a/phproad/modules/phpr/classes/phpr_securityframework.php
++++ b/phproad/modules/phpr/classes/phpr_securityframework.php
+@@ -7,6 +7,7 @@
+ 		private $mode_descriptor = null;
+ 		private $config_content = null;
+ 		private $salt;
++		private $salt_cookie;
+ 		private $key;
+ 		private $data_cache = array();
+ 		
+@@ -241,6 +242,25 @@
+ 		{
+ 			return md5($this->salt($salt_key).$value);
+ 		}
++
++		public function salted_cookie($salt_key = null)
++		{
++			if ($salt_key)
++				return md5($salt_key);
++
++			if (strlen($this->salt_cookie))
++				return $this->salt_cookie;
++
++			$salt = Phpr::$config->get('COOKIE_SALT');
++
++			if ($salt === null)
++				throw new Phpr_SystemException('Missing configuration value (COOKIE_SALT)');
++
++			if (strlen($salt) < 10)
++				throw new Phpr_SystemException('Invalid configuration value (COOKIE_SALT)');
++
++			return $this->salt_cookie = md5($salt);
++		}
+ 	}
+ 
+ ?>
+\ No newline at end of file
+diff --git a/phproad/system/initialize.php b/phproad/system/initialize.php
+index e10b152..f88dec6 100644
+--- a/phproad/system/initialize.php
++++ b/phproad/system/initialize.php
+@@ -110,12 +110,6 @@
+ 	require PATH_SYSTEM."/system/exceptions.php";
+ 
+ 	/*
+-	 * Process the resource request
+-	 */
+-
+-	Phpr_Response::processJavaScriptRequest();
+-
+-	/*
+ 	 * Initialize the events object
+ 	 */
+ 
+@@ -198,4 +192,4 @@
+ 	
+ 	Phpr::$session->restoreDbData();
+ 
+-?>
+\ No newline at end of file
++?>
+diff --git a/phproad/thirdpart/random_compat/CHANGELOG.md b/phproad/thirdpart/random_compat/CHANGELOG.md
+new file mode 100644
+index 0000000..247deac
+--- /dev/null
++++ b/phproad/thirdpart/random_compat/CHANGELOG.md
+@@ -0,0 +1,260 @@
++### Version 2.0.2 - 2016-04-03
++
++Added a consistency check (discovered by Taylor Hornby in his 
++[PHP encryption library](https://github.com/defuse/php-encryption)). It
++wasn't likely causing any trouble for us.
++
++### Version 2.0.1 - 2016-03-18
++
++Update comment in random.php
++
++### Version 2.0.0 - 2016-03-18
++
++Due to downstream errors, the OpenSSL removal now belongs in version 
++2.0.0.
++
++### Version 1.3.1 - 2016-03-18
++
++* Add more possible values to `open_baseir` check.
++
++### Version 1.3.0 - 2016-03-17
++
++* Removed `openssl_random_pseudo_bytes()` entirely. If you are using
++  random_compat in PHP on a Unix-like OS but cannot access
++  `/dev/urandom`, version 1.3+ will throw an `Exception`. If you want to
++  trust OpenSSL, feel free to write your own fallback code. e.g.
++  
++  ```php
++  try {
++      $bytes = random_bytes(32);
++  } catch (Exception $ex) {
++      $strong = false;
++      $bytes = openssl_random_pseudo_bytes(32, $strong);
++      if (!$strong) {
++          throw $ex;
++      }
++  }
++  ```
++
++### Version 1.2.2 - 2016-03-11
++
++* To prevent applications from hanging, if `/dev/urandom` is not
++  accessible to PHP, skip mcrypt (which just fails before giving OpenSSL
++  a chance and was morally equivalent to not offering OpenSSL at all).
++
++### Version 1.2.1 - 2016-02-29
++
++* PHP 5.6.10 - 5.6.12 will hang when mcrypt is used on Unix-based operating 
++  systems ([PHP bug 69833](https://bugs.php.net/bug.php?id=69833)). If you are
++  running one of these versions, please upgrade (or make sure `/dev/urandom` is
++  readable) otherwise you're relying on OpenSSL.
++
++### Version 1.2.0 - 2016-02-05
++
++* Whitespace and other cosmetic changes
++* Added a changelog.
++* We now ship with a command line utility to build a PHP Archive from the 
++  command line.
++  
++  Every time we publish a new release, we will also upload a .phar
++  to Github. Our public key is signed by our GPG key.
++
++### Version 1.1.6 - 2016-01-29
++
++* Eliminate `open_basedir` warnings by detecting this configuration setting. 
++  (Thanks [@oucil](https://github.com/oucil) for reporting this.)
++* Added install instructions to the README.
++* Documentation cleanup (there is, in fact, no `MCRYPT_CREATE_IV` constant, I 
++  meant to write `MCRYPT_DEV_URANDOM`)
++
++### Version 1.1.5 - 2016-01-06
++
++Prevent fatal errors on platforms with older versions of libsodium.
++
++### Version 1.1.4 - 2015-12-10
++
++Thanks [@narfbg](https://github.com/narfbg) for [critiquing the previous patch](https://github.com/paragonie/random_compat/issues/79#issuecomment-163590589)
++and suggesting a fix.
++
++### Version 1.1.3 - 2015-12-09
++
++The test for COM in disabled_classes is now case-insensitive.
++
++### Version 1.1.2 - 2015-12-09
++
++Don't instantiate COM if it's a disabled class. Removes the E_WARNING on Windows.
++
++### Version 1.1.1 - 2015-11-30
++
++Fix a performance issue with `/dev/urandom` buffering.
++
++### Version 1.1.0 - 2015-11-09
++
++Fix performance issues with ancient versions of PHP on Windows, but dropped 
++support for PHP < 5.4.1 without mcrypt on Windows 7+ in the process. Since this
++ is a BC break, semver dictates a minor version bump.
++
++### Version 1.0.10 - 2015-10-23
++
++* Avoid a performance killer with OpenSSL on Windows PHP 5.3.0 - 5.3.3 that was 
++  affecting [WordPress users](https://core.trac.wordpress.org/ticket/34409).
++* Use `$var = null` instead of `unset($var)` to avoid triggering the garbage 
++  collector and slowing things down.
++
++### Version 1.0.9 - 2015-10-20
++
++There is an outstanding issue `mcrypt_create_iv()` and PHP 7's `random_bytes()`
++on Windows reported by [@nicolas-grekas](https://github.com/nicolas-grekas) caused by `proc_open()` and environment
++variable handling (discovered by Appveyor when developing Symfony).
++
++Since the break is consistent, it's not our responsibility to fix it, but we 
++should fail the same way PHP 7 will (i.e. throw an `Exception` rather than raise
++an error and then throw an `Exception`).
++
++### Version 1.0.8 - 2015-10-18
++
++* Fix usability issues with Windows (`new COM('CAPICOM.Utilities.1')` is not 
++  always available).
++* You can now test all the possible drivers by running `phpunit.sh each` in the
++  `tests` directory.
++
++### Version 1.0.7 - 2015-10-16
++
++Several large integer handling bugfixes were contributed by [@oittaa](https://github.com/oittaa).
++
++### Version 1.0.6 - 2015-10-15
++
++Don't let the version number fool you, this was a pretty significant change.
++
++1. Added support for ext-libsodium, if it exists on the system. This is morally
++   equivalent to adding `getrandom(2)` support without having to expose the 
++   syscall interface in PHP-land.
++2. Relaxed open_basedir restrictions. In previous versions, if open_basedir was 
++   set, PHP wouldn't even try to read from `/dev/urandom`. Now it will still do 
++   so if you can.
++3. Fixed integer casting inconsistencies between random_compat and PHP 7.
++4. Handle edge cases where an integer overflow turns one of the parameters into
++   a float.
++
++One change that we discussed was making `random_bytes()` and `random_int()` 
++strict typed; meaning you could *only* pass integers to either function. While 
++most veteran programmers are probably only doing this already (we strongly 
++encourage it), it wouldn't be consistent with how these functions behave in PHP
++7. Please use these functions responsibly.
++
++We've had even more of the PHP community involved in this release; the 
++contributors list has been updated. If I forgot anybody, I promise you it's not
++because your contributions (either code or ideas) aren't valued, it's because 
++I'm a bit overloaded with information at the moment. Please let me know 
++immediately and I will correct my oversight.
++
++Thanks everyone for helping make random_compat better. 
++
++### Version 1.0.5 - 2015-10-08
++
++Got rid of the methods in the `Throwable` interface, which was causing problems 
++on PHP 5.2. While we would normally not care about 5.2 (since [5.4 and earlier are EOL'd](https://secure.php.net/supported-versions.php)),
++we do want to encourage widespread adoption (e.g. [Wordpress](https://core.trac.wordpress.org/ticket/28633)).
++
++### Version 1.0.4 - 2015-10-02
++
++Removed redundant `if()` checks, since `lib/random.php` is the entrypoint people
++should use.
++
++### Version 1.0.3 - 2015-10-02
++
++This release contains bug fixes contributed by the community.
++
++* Avoid a PHP Notice when PHP is running without the mbstring extension
++* Use a compatible version of PHPUnit for testing on older versions of PHP
++
++Although none of these bugs were outright security-affecting, updating ASAP is
++still strongly encouraged.
++
++### Version 1.0.2 - 2015-09-23
++
++Less strict input validation on `random_int()` parameters. PHP 7's `random_int()`
++accepts strings and floats that look like numbers, so we should too.
++
++Thanks [@dd32](https://github.com/@dd32) for correcting this oversight.
++
++### Version 1.0.1 - 2015-09-10
++
++Instead of throwing an Exception immediately on insecure platforms, only do so 
++when `random_bytes()` is invoked.
++
++### Version 1.0.0 - 2015-09-07
++
++Our API is now stable and forward-compatible with the CSPRNG features in PHP 7
++(as of 7.0.0 RC3).
++
++A lot of great people have contributed their time and expertise to make this 
++compatibility library possible. That this library has reached a stable release 
++is more a reflection on the community than it is on PIE.
++
++We are confident that random_compat will serve as the simplest and most secure
++CSPRNG interface available for PHP5 projects.
++
++### Version 0.9.7 (pre-release) - 2015-09-01
++
++An attempt to achieve compatibility with Error/TypeError in the RFC.
++
++This should be identical to 1.0.0 sans any last-minute changes or performance enhancements.
++
++### Version 0.9.6 (pre-release) - 2015-08-06
++
++* Split the implementations into their own file (for ease of auditing)
++* Corrected the file type check after `/dev/urandom` has been opened (thanks
++  [@narfbg](https://github.com/narfbg) and [@jedisct1](https://github.com/jedisct1))
++
++### Version 0.9.5 (pre-release) - 2015-07-31
++
++* Validate that `/dev/urandom` is a character device 
++  * Reported by [@lokdnet](https://twitter.com/lokdnet)
++  * Investigated by [@narfbg](https://github.com/narfbg) and [frymaster](http://stackoverflow.com/users/1226810/frymaster) on [StackOverflow](http://stackoverflow.com/q/31631066/2224584)
++* Remove support for `/dev/arandom` which is an old OpenBSD feature, thanks [@jedisct1](https://github.com/jedisct1)
++* Prevent race conditions on the `filetype()` check, thanks [@jedisct1](https://github.com/jedisct1)
++* Buffer file reads to 8 bytes (performance optimization; PHP defaults to 8192 bytes)
++
++### Version 0.9.4 (pre-release) - 2015-07-27
++
++* Add logic to verify that `/dev/arandom` and `/dev/urandom` are actually devices.
++* Some clean-up in the comments
++
++### Version 0.9.3 (pre-release) - 2015-07-22
++
++Unless the Exceptions change to PHP 7 fails, this should be the last pre-release
++version. If need be, we'll make one more pre-release version with compatible 
++behavior.
++
++Changes since 0.9.2:
++
++* Prioritize `/dev/arandom` and `/dev/urandom` over mcrypt.
++[@oittaa](https://github.com/oittaa) removed the -1 and +1 juggling on `$range` calculations for `random_int()`
++* Whitespace and comment clean-up, plus better variable names
++* Actually put a description in the composer.json file...
++
++### Version 0.9.2 (pre-release) - 2015-07-16
++
++* Consolidated `$range > PHP_INT_MAX` logic with `$range <= PHP_INT_MAX` (thanks
++  [@oittaa](https://github.com/oittaa) and [@CodesInChaos](https://github.com/CodesInChaos))
++* `tests/phpunit.sh` now also runs the tests with `mbstring.func_overload` and 
++  `open_basedir`
++* Style consistency, whitespace cleanup, more meaningful variable names
++
++### Version 0.9.1 (pre-release) - 2015-07-09
++
++* Return random values on integer ranges > `PHP_INT_MAX` (thanks [@CodesInChaos](https://github.com/CodesInChaos))
++* Determined CSPRNG preference:
++    1. `mcrypt_create_iv()` with `MCRYPT_DEV_URANDOM`
++    2. `/dev/arandom`
++    3. `/dev/urandom`
++    4. `openssl_random_pseudo_bytes()`
++* Optimized backend selection (thanks [@lt](https://github.com/lt))
++* Fix #3 (thanks [@scottchiefbaker](https://github.com/scottchiefbaker))
++
++### Version 0.9.0 (pre-release) - 2015-07-07
++
++This should be a sane polyfill for PHP 7's `random_bytes()` and `random_int()`.
++We hesitate to call it production ready until it has received sufficient third
++party review.
+\ No newline at end of file
+diff --git a/phproad/thirdpart/random_compat/ERRATA.md b/phproad/thirdpart/random_compat/ERRATA.md
+new file mode 100644
+index 0000000..0561630
+--- /dev/null
++++ b/phproad/thirdpart/random_compat/ERRATA.md
+@@ -0,0 +1,34 @@
++## Errata (Design Decisions)
++
++### Reasoning Behind the Order of Preferred Random Data Sources
++
++The order is:
++
++ 1. `libsodium if available`
++ 2. `fread() /dev/urandom if available`
++ 3. `mcrypt_create_iv($bytes, MCRYPT_DEV_URANDOM)`
++ 4. `COM('CAPICOM.Utilities.1')->GetRandom()`
++
++If libsodium is available, we get random data from it. This is the preferred
++method on all OSes, but libsodium is not very widely installed, so other
++fallbacks are available.
++
++Next, we read `/dev/urandom` (if it exists). This is the preferred file to read
++for random data for cryptographic purposes for BSD and Linux.
++
++Despite [strongly urging people not to use mcrypt in their projects](https://paragonie.com/blog/2015/05/if-you-re-typing-word-mcrypt-into-your-code-you-re-doing-it-wrong),
++because libmcrypt is abandonware and the API puts too much responsibility on the
++implementor, we prioritize `mcrypt_create_iv()` with `MCRYPT_DEV_URANDOM` above
++the remaining implementations.
++
++The reason is simple: `mcrypt_create_iv()` is part of PHP's `ext/mcrypt` code,
++and is not part `libmcrypt`. It actually does the right thing:
++
++ * On Unix-based operating systems, it reads from `/dev/urandom`, which unlike `/dev/random`
++   is the sane and correct thing to do.
++ * On Windows, it reads from `CryptGenRandom`, which is an exclusively Windows
++   way to get random bytes.
++
++If we're on Windows and don't have access to `mcrypt`, we use `CAPICOM.Utilities.1`.
++
++As of random_compat 1.3, we no longer fall through to OpenSSL. 
+diff --git a/phproad/thirdpart/random_compat/LICENSE b/phproad/thirdpart/random_compat/LICENSE
+new file mode 100644
+index 0000000..45c7017
+--- /dev/null
++++ b/phproad/thirdpart/random_compat/LICENSE
+@@ -0,0 +1,22 @@
++The MIT License (MIT)
++
++Copyright (c) 2015 Paragon Initiative Enterprises
++
++Permission is hereby granted, free of charge, to any person obtaining a copy
++of this software and associated documentation files (the "Software"), to deal
++in the Software without restriction, including without limitation the rights
++to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++copies of the Software, and to permit persons to whom the Software is
++furnished to do so, subject to the following conditions:
++
++The above copyright notice and this permission notice shall be included in all
++copies or substantial portions of the Software.
++
++THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
++SOFTWARE.
++
+diff --git a/phproad/thirdpart/random_compat/README.md b/phproad/thirdpart/random_compat/README.md
+new file mode 100644
+index 0000000..8056086
+--- /dev/null
++++ b/phproad/thirdpart/random_compat/README.md
+@@ -0,0 +1,176 @@
++# random_compat
++
++[![Build Status](https://travis-ci.org/paragonie/random_compat.svg?branch=master)](https://travis-ci.org/paragonie/random_compat)
++[![Scrutinizer](https://scrutinizer-ci.com/g/paragonie/random_compat/badges/quality-score.png?b=master)](https://scrutinizer-ci.com/g/paragonie/random_compat)
++
++PHP 5.x polyfill for `random_bytes()` and `random_int()` created and maintained
++by [Paragon Initiative Enterprises](https://paragonie.com).
++
++Although this library *should* function in earlier versions of PHP, we will only
++consider issues relevant to [supported PHP versions](https://secure.php.net/supported-versions.php).
++**If you are using an unsupported version of PHP, please upgrade as soon as possible.**
++
++## Important
++
++Although this library has been examined by some security experts in the PHP 
++community, there will always be a chance that we overlooked something. Please 
++ask your favorite trusted hackers to hammer it for implementation errors and
++bugs before even thinking about deploying it in production.
++
++**Do not use the master branch, use a [stable release](https://github.com/paragonie/random_compat/releases/latest).**
++
++For the background of this library, please refer to our blog post on 
++[Generating Random Integers and Strings in PHP](https://paragonie.com/blog/2015/07/how-safely-generate-random-strings-and-integers-in-php).
++
++### Usability Notice
++
++If PHP cannot safely generate random data, this library will throw an `Exception`.
++It will never fall back to insecure random data. If this keeps happening, upgrade
++to a newer version of PHP immediately.
++
++## Installing
++
++**With [Composer](https://getcomposer.org):**
++
++    composer require paragonie/random_compat
++
++**Signed PHP Archive:**
++
++As of version 1.2.0, we also ship an ECDSA-signed PHP Archive with each stable 
++release on Github.
++
++1. Download [the `.phar`, `.phar.pubkey`, and `.phar.pubkey.asc`](https://github.com/paragonie/random_compat/releases/latest) files.
++2. (**Recommended** but not required) Verify the PGP signature of `.phar.pubkey` 
++   (contained within the `.asc` file) using the [PGP public key for Paragon Initiative Enterprises](https://paragonie.com/static/gpg-public-key.txt).
++3. Extract both `.phar` and `.phar.pubkey` files to the same directory.
++4. `require_once "/path/to/random_compat.phar";`
++5. When a new version is released, you only need to replace the `.phar` file;
++   the `.pubkey` will not change (unless our signing key is ever compromised).
++
++**Manual Installation:**
++
++1. Download [a stable release](https://github.com/paragonie/random_compat/releases/latest).
++2. Extract the files into your project.
++3. `require_once "/path/to/random_compat/lib/random.php";`
++
++## Usage
++
++This library exposes the [CSPRNG functions added in PHP 7](https://secure.php.net/manual/en/ref.csprng.php)
++for use in PHP 5 projects. Their behavior should be identical.
++
++### Generate a string of random bytes
++
++```php
++try {
++    $string = random_bytes(32);
++} catch (TypeError $e) {
++    // Well, it's an integer, so this IS unexpected.
++    die("An unexpected error has occurred"); 
++} catch (Error $e) {
++    // This is also unexpected because 32 is a reasonable integer.
++    die("An unexpected error has occurred");
++} catch (Exception $e) {
++    // If you get this message, the CSPRNG failed hard.
++    die("Could not generate a random string. Is our OS secure?");
++}
++
++var_dump(bin2hex($string));
++// string(64) "5787c41ae124b3b9363b7825104f8bc8cf27c4c3036573e5f0d4a91ad2eeac6f"
++```
++
++### Generate a random integer between two given integers (inclusive)
++
++```php
++try {
++    $int = random_int(0,255);
++
++} catch (TypeError $e) {
++    // Well, it's an integer, so this IS unexpected.
++    die("An unexpected error has occurred"); 
++} catch (Error $e) {
++    // This is also unexpected because 0 and 255 are both reasonable integers.
++    die("An unexpected error has occurred");
++} catch (Exception $e) {
++    // If you get this message, the CSPRNG failed hard.
++    die("Could not generate a random string. Is our OS secure?");
++}
++
++var_dump($int);
++// int(47)
++```
++
++### Exception handling
++
++When handling exceptions and errors you must account for differences between
++PHP 5 and PHP7.
++
++The differences:
++
++* Catching `Error` works, so long as it is caught before `Exception`.
++* Catching `Exception` has different behavior, without previously catching `Error`.
++* There is *no* portable way to catch all errors/exceptions.
++
++#### Our recommendation
++
++**Always** catch `Error` before `Exception`.
++
++#### Example
++
++```php
++try {
++    return random_int(1, $userInput);
++} catch (TypeError $e) {
++    // This is okay, so long as `Error` is caught before `Exception`.
++    throw new Exception('Please enter a number!');
++} catch (Error $e) {
++    // This is required, if you do not need to do anything just rethrow.
++    throw $e;
++} catch (Exception $e) {
++    // This is optional and maybe omitted if you do not want to handle errors
++    // during generation.
++    throw new InternalServerErrorException(
++        'Oops, our server is bust and cannot generate any random data.',
++        500,
++        $e
++    );
++}
++```
++
++## Contributors
++
++This project would not be anywhere near as excellent as it is today if it 
++weren't for the contributions of the following individuals:
++
++* [@AndrewCarterUK (Andrew Carter)](https://github.com/AndrewCarterUK)
++* [@asgrim (James Titcumb)](https://github.com/asgrim)
++* [@bcremer (Benjamin Cremer)](https://github.com/bcremer)
++* [@CodesInChaos (Christian Winnerlein)](https://github.com/CodesInChaos)
++* [@chriscct7 (Chris Christoff)](https://github.com/chriscct7)
++* [@cs278 (Chris Smith)](https://github.com/cs278)
++* [@cweagans (Cameron Eagans)](https://github.com/cweagans)
++* [@dd32 (Dion Hulse)](https://github.com/dd32)
++* [@geggleto (Glenn Eggleton)](https://github.com/geggleto)
++* [@ircmaxell (Anthony Ferrara)](https://github.com/ircmaxell)
++* [@jedisct1 (Frank Denis)](https://github.com/jedisct1)
++* [@juliangut (Julián Gutiérrez)](https://github.com/juliangut)
++* [@kelunik (Niklas Keller)](https://github.com/kelunik)
++* [@lt (Leigh)](https://github.com/lt)
++* [@MasonM (Mason Malone)](https://github.com/MasonM)
++* [@mmeyer2k (Michael M)](https://github.com/mmeyer2k)
++* [@narfbg (Andrey Andreev)](https://github.com/narfbg)
++* [@nicolas-grekas (Nicolas Grekas)](https://github.com/nicolas-grekas)
++* [@oittaa](https://github.com/oittaa)
++* [@oucil (Kevin Farley)](https://github.com/oucil)
++* [@redragonx (Stephen Chavez)](https://github.com/redragonx)
++* [@rchouinard (Ryan Chouinard)](https://github.com/rchouinard)
++* [@SammyK (Sammy Kaye Powers)](https://github.com/SammyK)
++* [@scottchiefbaker (Scott Baker)](https://github.com/scottchiefbaker)
++* [@skyosev (Stoyan Kyosev)](https://github.com/skyosev)
++* [@stof (Christophe Coevoet)](https://github.com/stof)
++* [@teohhanhui (Teoh Han Hui)](https://github.com/teohhanhui)
++* [@tom-- (Tom Worster)](https://github.com/tom--)
++* [@tsyr2ko](https://github.com/tsyr2ko)
++* [@trowski (Aaron Piotrowski)](https://github.com/trowski)
++* [@twistor (Chris Lepannen)](https://github.com/twistor)
++* [@voku (Lars Moelleken)](https://github.com/voku)
++* [@xabbuh (Christian Flothmann)](https://github.com/xabbuh)
+diff --git a/phproad/thirdpart/random_compat/SECURITY.md b/phproad/thirdpart/random_compat/SECURITY.md
+new file mode 100644
+index 0000000..8f731b3
+--- /dev/null
++++ b/phproad/thirdpart/random_compat/SECURITY.md
+@@ -0,0 +1,108 @@
++# An Invitation to Security Researchers
++
++Every company says they take security "very seriously." Rather than bore anyone 
++with banal boilerplate, here are some quick answers followed by detailed
++elaboration. If you have any questions about our policies, please email them to
++`scott@paragonie.com`.
++
++## Quick Answers
++
++* There is no compulsion to disclose vulnerabilities privately, but we 
++  appreciate a head's up.
++* `security@paragonie.com` will get your reports to the right person. Our GPG 
++  fingerprint, should you decide to encrypt your report, is 
++  `7F52 D5C6 1D12 55C7 3136  2E82 6B97 A1C2 8264 04DA`.
++
++* **YES**, we will reward security researchers who disclose vulnerabilities in
++  our software.
++* In most cases, **No Proof-of-Concept Required.**
++
++## How to Report a Security Bug to Paragon Initiative Enterprises
++
++### There is no compulsion to disclose privately.
++
++We believe vulnerability disclosure style is a personal choice and enjoy working
++with a diverse community. We understand and appreciate the importance of Full 
++Disclosure in the history and practice of security research.
++
++We would *like* to know about high-severity bugs before they become public
++knowledge, so we can fix them in a timely manner, but **we do not believe in 
++threatening researchers or trying to enforce vulnerability embargoes**.
++
++Ultimately, if you discover a security-affecting vulnerability, what you do with
++it is your choice. We would like to work with people, and to celebrate and 
++reward their skill, experience, and dedication. We appreciate being informed of
++our mistakes so we can learn from them and build a better product. Our goal is
++to empower the community.
++
++### Where to Send Security Vulnerabilities
++
++Our security email address is `security@paragonie.com`. Also feel free to open a
++new issue on Github if you want to disclose publicly.
++
++```
++-----BEGIN PGP PUBLIC KEY BLOCK-----
++Version: GnuPG
++
++mQENBFUgwRUBCADcIpqNwyYc5UmY/tpx1sF/rQ3knR1YNXYZThzFV+Gmqhp1fDH5
++qBs9foh1xwI6O7knWmQngnf/nBumI3x6xj7PuOdEZUh2FwCG/VWnglW8rKmoHzHA
++ivjiu9SLnPIPAgHSHeh2XD7q3Ndm3nenbjAiRFNl2iXcwA2cTQp9Mmfw9vVcw0G0
++z1o0G3s8cC8ZS6flFySIervvfSRWj7A1acI5eE3+AH/qXJRdEJ+9J8OB65p1JMfk
++6+fWgOB1XZxMpz70S0rW6IX38WDSRhEK2fXyZJAJjyt+YGuzjZySNSoQR/V6vNYn
++syrNPCJ2i5CgZQxAkyBBcr7koV9RIhPRzct/ABEBAAG0IVNlY3VyaXR5IDxzZWN1
++cml0eUBwYXJhZ29uaWUuY29tPokBOQQTAQIAIwUCVSDBFQIbAwcLCQgHAwIBBhUI
++AgkKCwQWAgMBAh4BAheAAAoJEGuXocKCZATat2YIAIoejNFEQ2c1iaOEtSuB7Pn/
++WLbsDsHNLDKOV+UnfaCjv/vL7D+5NMChFCi2frde/NQb2TsjqmIH+V+XbnJtlrXD
++Vj7yvMVal+Jqjwj7v4eOEWcKVcFZk+9cfUgh7t92T2BMX58RpgZF0IQZ6Z1R3FfC
++9Ub4X6ykW+te1q0/4CoRycniwmlQi6iGSr99LQ5pfJq2Qlmz/luTZ0UX0h575T7d
++cp2T1sX/zFRk/fHeANWSksipdDBjAXR7NMnYZgw2HghEdFk/xRDY7K1NRWNZBf05
++WrMHmh6AIVJiWZvI175URxEe268hh+wThBhXQHMhFNJM1qPIuzb4WogxM3UUD7m5
++AQ0EVSDBFQEIALNkpzSuJsHAHh79sc0AYWztdUe2MzyofQbbOnOCpWZebYsC3EXU
++335fIg59k0m6f+O7GmEZzzIv5v0i99GS1R8CJm6FvhGqtH8ZqmOGbc71WdJSiNVE
++0kpQoJlVzRbig6ZyyjzrggbM1eh5OXOk5pw4+23FFEdw7JWU0HJS2o71r1hwp05Z
++vy21kcUEobz/WWQQyGS0Neo7PJn+9KS6wOxXul/UE0jct/5f7KLMdWMJ1VgniQmm
++hjvkHLPSICteqCI04RfcmMseW9gueHQXeUu1SNIvsWa2MhxjeBej3pDnrZWszKwy
++gF45GO9/v4tkIXNMy5J1AtOyRgQ3IUMqp8EAEQEAAYkBHwQYAQIACQUCVSDBFQIb
++DAAKCRBrl6HCgmQE2jnIB/4/xFz8InpM7eybnBOAir3uGcYfs3DOmaKn7qWVtGzv
++rKpQPYnVtlU2i6Z5UO4c4jDLT/8Xm1UDz3Lxvqt4xCaDwJvBZexU5BMK8l5DvOzH
++6o6P2L1UDu6BvmPXpVZz7/qUhOnyf8VQg/dAtYF4/ax19giNUpI5j5o5mX5w80Rx
++qSXV9NdSL4fdjeG1g/xXv2luhoV53T1bsycI3wjk/x5tV+M2KVhZBvvuOm/zhJje
++oLWp0saaESkGXIXqurj6gZoujJvSvzl0n9F9VwqMEizDUfrXgtD1siQGhP0sVC6q
++ha+F/SAEJ0jEquM4TfKWWU2S5V5vgPPpIQSYRnhQW4b1
++=xJPW
++-----END PGP PUBLIC KEY BLOCK-----
++```
++
++### We Will Reward Security Researchers
++
++**This process has not been formalized; nor have dollar amounts been 
++discussed.**
++
++However, if you report a valid security-affecting bug, we will compensate you
++for the time spent finding the vulnerability and reward you for being a good
++neighbor.
++
++#### What does a "valid" bug mean?
++
++There are two sides to this:
++
++1. Some have spammed projects with invalid bug reports hoping to collect
++   bounties for pressing a button and running an automated analysis tool. This
++   is not cool.
++2. There is a potential for the developers of a project to declare all security
++   bug reports as invalid to save money.
++
++Our team members have an established history of reporting vulnerabilities to
++large open source projects. **We aren't in the business of ripping people off.**
++When in doubt, our policy is to err on the side of generosity.
++
++### No Proof-of-Concept Required
++
++We might ask for one if we feel we do not understand some of the details 
++pertaining to a specific vulnerability. We certainly appreciate them if you 
++include them in your report, but we believe **the burden lies with the developer
++to prove their software *is* secure** rather than with the researcher to prove
++that it isn't.
++
++In our experience, most bugs are simpler to fix than they are to exploit.
++
+diff --git a/phproad/thirdpart/random_compat/build-phar.sh b/phproad/thirdpart/random_compat/build-phar.sh
+new file mode 100644
+index 0000000..b4a5ba3
+--- /dev/null
++++ b/phproad/thirdpart/random_compat/build-phar.sh
+@@ -0,0 +1,5 @@
++#!/usr/bin/env bash
++
++basedir=$( dirname $( readlink -f ${BASH_SOURCE[0]} ) )
++
++php -dphar.readonly=0 "$basedir/other/build_phar.php" $*
+\ No newline at end of file
+diff --git a/phproad/thirdpart/random_compat/composer.json b/phproad/thirdpart/random_compat/composer.json
+new file mode 100644
+index 0000000..d363f4c
+--- /dev/null
++++ b/phproad/thirdpart/random_compat/composer.json
+@@ -0,0 +1,35 @@
++{
++    "name":         "paragonie/random_compat",
++    "description":  "PHP 5.x polyfill for random_bytes() and random_int() from PHP 7",
++    "keywords": [
++            "csprng",
++            "random",
++            "pseudorandom"
++        ],
++    "license":      "MIT",
++    "type":         "library",
++    "authors": [
++            {
++                "name":     "Paragon Initiative Enterprises",
++                "email":    "security@paragonie.com",
++                "homepage": "https://paragonie.com"
++            }
++        ],
++    "support": {
++        "issues":   "https://github.com/paragonie/random_compat/issues",
++        "email":    "info@paragonie.com",
++        "source":   "https://github.com/paragonie/random_compat"
++    },
++    "require": {
++        "php": ">=5.2.0"
++    },
++    "require-dev": {
++        "phpunit/phpunit": "4.*|5.*"
++    },
++    "suggest": {
++        "ext-libsodium": "Provides a modern crypto API that can be used to generate random bytes."
++    },
++    "autoload": {
++        "files": ["lib/random.php"]
++    }
++}
+diff --git a/phproad/thirdpart/random_compat/dist/random_compat.phar.pubkey b/phproad/thirdpart/random_compat/dist/random_compat.phar.pubkey
+new file mode 100644
+index 0000000..eb50ebf
+--- /dev/null
++++ b/phproad/thirdpart/random_compat/dist/random_compat.phar.pubkey
+@@ -0,0 +1,5 @@
++-----BEGIN PUBLIC KEY-----
++MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAEEd+wCqJDrx5B4OldM0dQE0ZMX+lx1ZWm
++pui0SUqD4G29L3NGsz9UhJ/0HjBdbnkhIK5xviT0X5vtjacF6ajgcCArbTB+ds+p
+++h7Q084NuSuIpNb6YPfoUFgC/CL9kAoc
++-----END PUBLIC KEY-----
+diff --git a/phproad/thirdpart/random_compat/dist/random_compat.phar.pubkey.asc b/phproad/thirdpart/random_compat/dist/random_compat.phar.pubkey.asc
+new file mode 100644
+index 0000000..6a1d7f3
+--- /dev/null
++++ b/phproad/thirdpart/random_compat/dist/random_compat.phar.pubkey.asc
+@@ -0,0 +1,11 @@
++-----BEGIN PGP SIGNATURE-----
++Version: GnuPG v2.0.22 (MingW32)
++
++iQEcBAABAgAGBQJWtW1hAAoJEGuXocKCZATaJf0H+wbZGgskK1dcRTsuVJl9IWip
++QwGw/qIKI280SD6/ckoUMxKDCJiFuPR14zmqnS36k7N5UNPnpdTJTS8T11jttSpg
++1LCmgpbEIpgaTah+cELDqFCav99fS+bEiAL5lWDAHBTE/XPjGVCqeehyPYref4IW
++NDBIEsvnHPHPLsn6X5jq4+Yj5oUixgxaMPiR+bcO4Sh+RzOVB6i2D0upWfRXBFXA
++NNnsg9/zjvoC7ZW73y9uSH+dPJTt/Vgfeiv52/v41XliyzbUyLalf02GNPY+9goV
++JHG1ulEEBJOCiUD9cE1PUIJwHA/HqyhHIvV350YoEFiHl8iSwm7SiZu5kPjaq74=
++=B6+8
++-----END PGP SIGNATURE-----
+diff --git a/phproad/thirdpart/random_compat/lib/byte_safe_strings.php b/phproad/thirdpart/random_compat/lib/byte_safe_strings.php
+new file mode 100644
+index 0000000..dec5d30
+--- /dev/null
++++ b/phproad/thirdpart/random_compat/lib/byte_safe_strings.php
+@@ -0,0 +1,181 @@
++<?php
++/**
++ * Random_* Compatibility Library
++ * for using the new PHP 7 random_* API in PHP 5 projects
++ *
++ * The MIT License (MIT)
++ *
++ * Copyright (c) 2015 Paragon Initiative Enterprises
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
++ * SOFTWARE.
++ */
++
++if (!function_exists('RandomCompat_strlen')) {
++    if (
++        defined('MB_OVERLOAD_STRING') &&
++        ini_get('mbstring.func_overload') & MB_OVERLOAD_STRING
++    ) {
++        /**
++         * strlen() implementation that isn't brittle to mbstring.func_overload
++         *
++         * This version uses mb_strlen() in '8bit' mode to treat strings as raw
++         * binary rather than UTF-8, ISO-8859-1, etc
++         *
++         * @param string $binary_string
++         *
++         * @throws TypeError
++         *
++         * @return int
++         */
++        function RandomCompat_strlen($binary_string)
++        {
++            if (!is_string($binary_string)) {
++                throw new TypeError(
++                    'RandomCompat_strlen() expects a string'
++                );
++            }
++
++            return mb_strlen($binary_string, '8bit');
++        }
++
++    } else {
++        /**
++         * strlen() implementation that isn't brittle to mbstring.func_overload
++         *
++         * This version just used the default strlen()
++         *
++         * @param string $binary_string
++         *
++         * @throws TypeError
++         *
++         * @return int
++         */
++        function RandomCompat_strlen($binary_string)
++        {
++            if (!is_string($binary_string)) {
++                throw new TypeError(
++                    'RandomCompat_strlen() expects a string'
++                );
++            }
++            return strlen($binary_string);
++        }
++    }
++}
++
++if (!function_exists('RandomCompat_substr')) {
++
++    if (
++        defined('MB_OVERLOAD_STRING')
++        &&
++        ini_get('mbstring.func_overload') & MB_OVERLOAD_STRING
++    ) {
++        /**
++         * substr() implementation that isn't brittle to mbstring.func_overload
++         *
++         * This version uses mb_substr() in '8bit' mode to treat strings as raw
++         * binary rather than UTF-8, ISO-8859-1, etc
++         *
++         * @param string $binary_string
++         * @param int $start
++         * @param int $length (optional)
++         *
++         * @throws TypeError
++         *
++         * @return string
++         */
++        function RandomCompat_substr($binary_string, $start, $length = null)
++        {
++            if (!is_string($binary_string)) {
++                throw new TypeError(
++                    'RandomCompat_substr(): First argument should be a string'
++                );
++            }
++
++            if (!is_int($start)) {
++                throw new TypeError(
++                    'RandomCompat_substr(): Second argument should be an integer'
++                );
++            }
++
++            if ($length === null) {
++                /**
++                 * mb_substr($str, 0, NULL, '8bit') returns an empty string on
++                 * PHP 5.3, so we have to find the length ourselves.
++                 */
++                $length = RandomCompat_strlen($length) - $start;
++            } elseif (!is_int($length)) {
++                throw new TypeError(
++                    'RandomCompat_substr(): Third argument should be an integer, or omitted'
++                );
++            }
++
++            // Consistency with PHP's behavior
++            if ($start === RandomCompat_strlen($binary_string) && $length === 0) {
++                return '';
++            }
++            if ($start > RandomCompat_strlen($binary_string)) {
++                return false;
++            }
++
++            return mb_substr($binary_string, $start, $length, '8bit');
++        }
++
++    } else {
++
++        /**
++         * substr() implementation that isn't brittle to mbstring.func_overload
++         *
++         * This version just uses the default substr()
++         *
++         * @param string $binary_string
++         * @param int $start
++         * @param int $length (optional)
++         *
++         * @throws TypeError
++         *
++         * @return string
++         */
++        function RandomCompat_substr($binary_string, $start, $length = null)
++        {
++            if (!is_string($binary_string)) {
++                throw new TypeError(
++                    'RandomCompat_substr(): First argument should be a string'
++                );
++            }
++
++            if (!is_int($start)) {
++                throw new TypeError(
++                    'RandomCompat_substr(): Second argument should be an integer'
++                );
++            }
++
++            if ($length !== null) {
++                if (!is_int($length)) {
++                    throw new TypeError(
++                        'RandomCompat_substr(): Third argument should be an integer, or omitted'
++                    );
++                }
++
++                return substr($binary_string, $start, $length);
++            }
++
++            return substr($binary_string, $start);
++        }
++    }
++}
+diff --git a/phproad/thirdpart/random_compat/lib/cast_to_int.php b/phproad/thirdpart/random_compat/lib/cast_to_int.php
+new file mode 100644
+index 0000000..f441c5d
+--- /dev/null
++++ b/phproad/thirdpart/random_compat/lib/cast_to_int.php
+@@ -0,0 +1,71 @@
++<?php
++/**
++ * Random_* Compatibility Library
++ * for using the new PHP 7 random_* API in PHP 5 projects
++ *
++ * The MIT License (MIT)
++ *
++ * Copyright (c) 2015 Paragon Initiative Enterprises
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
++ * SOFTWARE.
++ */
++
++if (!function_exists('RandomCompat_intval')) {
++    
++    /**
++     * Cast to an integer if we can, safely.
++     * 
++     * If you pass it a float in the range (~PHP_INT_MAX, PHP_INT_MAX)
++     * (non-inclusive), it will sanely cast it to an int. If you it's equal to
++     * ~PHP_INT_MAX or PHP_INT_MAX, we let it fail as not an integer. Floats 
++     * lose precision, so the <= and => operators might accidentally let a float
++     * through.
++     * 
++     * @param int|float $number    The number we want to convert to an int
++     * @param boolean   $fail_open Set to true to not throw an exception
++     * 
++     * @return int (or float if $fail_open)
++     *
++     * @throws TypeError
++     */
++    function RandomCompat_intval($number, $fail_open = false)
++    {
++        if (is_numeric($number)) {
++            $number += 0;
++        }
++
++        if (
++            is_float($number)
++            &&
++            $number > ~PHP_INT_MAX
++            &&
++            $number < PHP_INT_MAX
++        ) {
++            $number = (int) $number;
++        }
++
++        if (is_int($number) || $fail_open) {
++            return $number;
++        }
++
++        throw new TypeError(
++            'Expected an integer.'
++        );
++    }
++}
+diff --git a/phproad/thirdpart/random_compat/lib/error_polyfill.php b/phproad/thirdpart/random_compat/lib/error_polyfill.php
+new file mode 100644
+index 0000000..57cfefd
+--- /dev/null
++++ b/phproad/thirdpart/random_compat/lib/error_polyfill.php
+@@ -0,0 +1,42 @@
++<?php
++/**
++ * Random_* Compatibility Library 
++ * for using the new PHP 7 random_* API in PHP 5 projects
++ * 
++ * The MIT License (MIT)
++ * 
++ * Copyright (c) 2015 Paragon Initiative Enterprises
++ * 
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ * 
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ * 
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
++ * SOFTWARE.
++ */
++
++if (!class_exists('Error', false)) {
++    // We can't really avoid making this extend Exception in PHP 5.
++    class Error extends Exception
++    {
++        
++    }
++}
++
++if (!class_exists('TypeError', false)) {
++    class TypeError extends Error
++    {
++        
++    }
++}
+diff --git a/phproad/thirdpart/random_compat/lib/random.php b/phproad/thirdpart/random_compat/lib/random.php
+new file mode 100644
+index 0000000..a880259
+--- /dev/null
++++ b/phproad/thirdpart/random_compat/lib/random.php
+@@ -0,0 +1,197 @@
++<?php
++/**
++ * Random_* Compatibility Library
++ * for using the new PHP 7 random_* API in PHP 5 projects
++ *
++ * @version 2.0.2
++ * @released 2016-04-03
++ *
++ * The MIT License (MIT)
++ *
++ * Copyright (c) 2015 Paragon Initiative Enterprises
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
++ * SOFTWARE.
++ */
++
++if (!defined('PHP_VERSION_ID')) {
++    // This constant was introduced in PHP 5.2.7
++    $RandomCompatversion = explode('.', PHP_VERSION);
++    define(
++        'PHP_VERSION_ID',
++        $RandomCompatversion[0] * 10000
++        + $RandomCompatversion[1] * 100
++        + $RandomCompatversion[2]
++    );
++    $RandomCompatversion = null;
++}
++
++if (PHP_VERSION_ID < 70000) {
++
++    if (!defined('RANDOM_COMPAT_READ_BUFFER')) {
++        define('RANDOM_COMPAT_READ_BUFFER', 8);
++    }
++
++    $RandomCompatDIR = dirname(__FILE__);
++
++    require_once $RandomCompatDIR.'/byte_safe_strings.php';
++    require_once $RandomCompatDIR.'/cast_to_int.php';
++    require_once $RandomCompatDIR.'/error_polyfill.php';
++
++    if (!function_exists('random_bytes')) {
++        /**
++         * PHP 5.2.0 - 5.6.x way to implement random_bytes()
++         *
++         * We use conditional statements here to define the function in accordance
++         * to the operating environment. It's a micro-optimization.
++         *
++         * In order of preference:
++         *   1. Use libsodium if available.
++         *   2. fread() /dev/urandom if available (never on Windows)
++         *   3. mcrypt_create_iv($bytes, MCRYPT_DEV_URANDOM)
++         *   4. COM('CAPICOM.Utilities.1')->GetRandom()
++         *   5. openssl_random_pseudo_bytes() (absolute last resort)
++         *
++         * See ERRATA.md for our reasoning behind this particular order
++         */
++        if (extension_loaded('libsodium')) {
++            // See random_bytes_libsodium.php
++            if (PHP_VERSION_ID >= 50300 && function_exists('\\Sodium\\randombytes_buf')) {
++                require_once $RandomCompatDIR.'/random_bytes_libsodium.php';
++            } elseif (method_exists('Sodium', 'randombytes_buf')) {
++                require_once $RandomCompatDIR.'/random_bytes_libsodium_legacy.php';
++            }
++        }
++
++        /**
++         * Reading directly from /dev/urandom:
++         */
++        if (DIRECTORY_SEPARATOR === '/') {
++            // DIRECTORY_SEPARATOR === '/' on Unix-like OSes -- this is a fast
++            // way to exclude Windows.
++            $RandomCompatUrandom = true;
++            $RandomCompat_basedir = ini_get('open_basedir');
++
++            if (!empty($RandomCompat_basedir)) {
++                $RandomCompat_open_basedir = explode(
++                    PATH_SEPARATOR,
++                    strtolower($RandomCompat_basedir)
++                );
++                $RandomCompatUrandom = (array() !== array_intersect(
++                    array('/dev', '/dev/', '/dev/urandom'),
++                    $RandomCompat_open_basedir
++                ));
++                $RandomCompat_open_basedir = null;
++            }
++
++            if (
++                !function_exists('random_bytes')
++                &&
++                $RandomCompatUrandom
++                &&
++                @is_readable('/dev/urandom')
++            ) {
++                // Error suppression on is_readable() in case of an open_basedir
++                // or safe_mode failure. All we care about is whether or not we
++                // can read it at this point. If the PHP environment is going to
++                // panic over trying to see if the file can be read in the first
++                // place, that is not helpful to us here.
++
++                // See random_bytes_dev_urandom.php
++                require_once $RandomCompatDIR.'/random_bytes_dev_urandom.php';
++            }
++            // Unset variables after use
++            $RandomCompat_basedir = null;
++        } else {
++            $RandomCompatUrandom = false;
++        }
++
++        /**
++         * mcrypt_create_iv()
++         */
++        if (
++            !function_exists('random_bytes')
++            &&
++            PHP_VERSION_ID >= 50307
++            &&
++            extension_loaded('mcrypt')
++            &&
++            (DIRECTORY_SEPARATOR !== '/' || $RandomCompatUrandom)
++        ) {
++            // Prevent this code from hanging indefinitely on non-Windows;
++            // see https://bugs.php.net/bug.php?id=69833
++            if (
++                DIRECTORY_SEPARATOR !== '/' || 
++                (PHP_VERSION_ID <= 50609 || PHP_VERSION_ID >= 50613)
++            ) {
++                // See random_bytes_mcrypt.php
++                require_once $RandomCompatDIR.'/random_bytes_mcrypt.php';
++            }
++        }
++        $RandomCompatUrandom = null;
++
++        if (
++            !function_exists('random_bytes')
++            &&
++            extension_loaded('com_dotnet')
++            &&
++            class_exists('COM')
++        ) {
++            $RandomCompat_disabled_classes = preg_split(
++                '#\s*,\s*#',
++                strtolower(ini_get('disable_classes'))
++            );
++
++            if (!in_array('com', $RandomCompat_disabled_classes)) {
++                try {
++                    $RandomCompatCOMtest = new COM('CAPICOM.Utilities.1');
++                    if (method_exists($RandomCompatCOMtest, 'GetRandom')) {
++                        // See random_bytes_com_dotnet.php
++                        require_once $RandomCompatDIR.'/random_bytes_com_dotnet.php';
++                    }
++                } catch (com_exception $e) {
++                    // Don't try to use it.
++                }
++            }
++            $RandomCompat_disabled_classes = null;
++            $RandomCompatCOMtest = null;
++        }
++
++        /**
++         * throw new Exception
++         */
++        if (!function_exists('random_bytes')) {
++            /**
++             * We don't have any more options, so let's throw an exception right now
++             * and hope the developer won't let it fail silently.
++             */
++            function random_bytes($length)
++            {
++                throw new Exception(
++                    'There is no suitable CSPRNG installed on your system'
++                );
++            }
++        }
++    }
++
++    if (!function_exists('random_int')) {
++        require_once $RandomCompatDIR.'/random_int.php';
++    }
++
++    $RandomCompatDIR = null;
++}
+diff --git a/phproad/thirdpart/random_compat/lib/random_bytes_com_dotnet.php b/phproad/thirdpart/random_compat/lib/random_bytes_com_dotnet.php
+new file mode 100644
+index 0000000..3422825
+--- /dev/null
++++ b/phproad/thirdpart/random_compat/lib/random_bytes_com_dotnet.php
+@@ -0,0 +1,81 @@
++<?php
++/**
++ * Random_* Compatibility Library 
++ * for using the new PHP 7 random_* API in PHP 5 projects
++ * 
++ * The MIT License (MIT)
++ * 
++ * Copyright (c) 2015 Paragon Initiative Enterprises
++ * 
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ * 
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ * 
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
++ * SOFTWARE.
++ */
++
++/**
++ * Windows with PHP < 5.3.0 will not have the function
++ * openssl_random_pseudo_bytes() available, so let's use
++ * CAPICOM to work around this deficiency.
++ * 
++ * @param int $bytes
++ * 
++ * @throws Exception
++ * 
++ * @return string
++ */
++function random_bytes($bytes)
++{
++    try {
++        $bytes = RandomCompat_intval($bytes);
++    } catch (TypeError $ex) {
++        throw new TypeError(
++            'random_bytes(): $bytes must be an integer'
++        );
++    }
++
++    if ($bytes < 1) {
++        throw new Error(
++            'Length must be greater than 0'
++        );
++    }
++
++    $buf = '';
++    $util = new COM('CAPICOM.Utilities.1');
++    $execCount = 0;
++
++    /**
++     * Let's not let it loop forever. If we run N times and fail to
++     * get N bytes of random data, then CAPICOM has failed us.
++     */
++    do {
++        $buf .= base64_decode($util->GetRandom($bytes, 0));
++        if (RandomCompat_strlen($buf) >= $bytes) {
++            /**
++             * Return our random entropy buffer here:
++             */
++            return RandomCompat_substr($buf, 0, $bytes);
++        }
++        ++$execCount; 
++    } while ($execCount < $bytes);
++
++    /**
++     * If we reach here, PHP has failed us.
++     */
++    throw new Exception(
++        'Could not gather sufficient random data'
++    );
++}
+diff --git a/phproad/thirdpart/random_compat/lib/random_bytes_dev_urandom.php b/phproad/thirdpart/random_compat/lib/random_bytes_dev_urandom.php
+new file mode 100644
+index 0000000..db93b07
+--- /dev/null
++++ b/phproad/thirdpart/random_compat/lib/random_bytes_dev_urandom.php
+@@ -0,0 +1,148 @@
++<?php
++/**
++ * Random_* Compatibility Library 
++ * for using the new PHP 7 random_* API in PHP 5 projects
++ * 
++ * The MIT License (MIT)
++ * 
++ * Copyright (c) 2015 Paragon Initiative Enterprises
++ * 
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ * 
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ * 
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
++ * SOFTWARE.
++ */
++
++if (!defined('RANDOM_COMPAT_READ_BUFFER')) {
++    define('RANDOM_COMPAT_READ_BUFFER', 8);
++}
++
++/**
++ * Unless open_basedir is enabled, use /dev/urandom for
++ * random numbers in accordance with best practices
++ * 
++ * Why we use /dev/urandom and not /dev/random
++ * @ref http://sockpuppet.org/blog/2014/02/25/safely-generate-random-numbers
++ * 
++ * @param int $bytes
++ * 
++ * @throws Exception
++ * 
++ * @return string
++ */
++function random_bytes($bytes)
++{
++    static $fp = null;
++    /**
++     * This block should only be run once
++     */
++    if (empty($fp)) {
++        /**
++         * We use /dev/urandom if it is a char device.
++         * We never fall back to /dev/random
++         */
++        $fp = fopen('/dev/urandom', 'rb');
++        if (!empty($fp)) {
++            $st = fstat($fp);
++            if (($st['mode'] & 0170000) !== 020000) {
++                fclose($fp);
++                $fp = false;
++            }
++        }
++
++        if (!empty($fp)) {
++            /**
++             * stream_set_read_buffer() does not exist in HHVM
++             * 
++             * If we don't set the stream's read buffer to 0, PHP will
++             * internally buffer 8192 bytes, which can waste entropy
++             * 
++             * stream_set_read_buffer returns 0 on success
++             */
++            if (function_exists('stream_set_read_buffer')) {
++                stream_set_read_buffer($fp, RANDOM_COMPAT_READ_BUFFER);
++            }
++            if (function_exists('stream_set_chunk_size')) {
++                stream_set_chunk_size($fp, RANDOM_COMPAT_READ_BUFFER);
++            }
++        }
++    }
++
++    try {
++        $bytes = RandomCompat_intval($bytes);
++    } catch (TypeError $ex) {
++        throw new TypeError(
++            'random_bytes(): $bytes must be an integer'
++        );
++    }
++
++    if ($bytes < 1) {
++        throw new Error(
++            'Length must be greater than 0'
++        );
++    }
++
++    /**
++     * This if() block only runs if we managed to open a file handle
++     * 
++     * It does not belong in an else {} block, because the above 
++     * if (empty($fp)) line is logic that should only be run once per
++     * page load.
++     */
++    if (!empty($fp)) {
++        $remaining = $bytes;
++        $buf = '';
++
++        /**
++         * We use fread() in a loop to protect against partial reads
++         */
++        do {
++            $read = fread($fp, $remaining); 
++            if ($read === false) {
++                /**
++                 * We cannot safely read from the file. Exit the
++                 * do-while loop and trigger the exception condition
++                 */
++                $buf = false;
++                break;
++            }
++            /**
++             * Decrease the number of bytes returned from remaining
++             */
++            $remaining -= RandomCompat_strlen($read);
++            $buf .= $read;
++        } while ($remaining > 0);
++        
++        /**
++         * Is our result valid?
++         */
++        if ($buf !== false) {
++            if (RandomCompat_strlen($buf) === $bytes) {
++                /**
++                 * Return our random entropy buffer here:
++                 */
++                return $buf;
++            }
++        }
++    }
++
++    /**
++     * If we reach here, PHP has failed us.
++     */
++    throw new Exception(
++        'Error reading from source device'
++    );
++}
+diff --git a/phproad/thirdpart/random_compat/lib/random_bytes_libsodium.php b/phproad/thirdpart/random_compat/lib/random_bytes_libsodium.php
+new file mode 100644
+index 0000000..f802d4e
+--- /dev/null
++++ b/phproad/thirdpart/random_compat/lib/random_bytes_libsodium.php
+@@ -0,0 +1,86 @@
++<?php
++/**
++ * Random_* Compatibility Library 
++ * for using the new PHP 7 random_* API in PHP 5 projects
++ * 
++ * The MIT License (MIT)
++ * 
++ * Copyright (c) 2015 Paragon Initiative Enterprises
++ * 
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ * 
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ * 
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
++ * SOFTWARE.
++ */
++
++/**
++ * If the libsodium PHP extension is loaded, we'll use it above any other
++ * solution.
++ *
++ * libsodium-php project:
++ * @ref https://github.com/jedisct1/libsodium-php
++ *
++ * @param int $bytes
++ *
++ * @throws Exception
++ *
++ * @return string
++ */
++function random_bytes($bytes)
++{
++    try {
++        $bytes = RandomCompat_intval($bytes);
++    } catch (TypeError $ex) {
++        throw new TypeError(
++            'random_bytes(): $bytes must be an integer'
++        );
++    }
++
++    if ($bytes < 1) {
++        throw new Error(
++            'Length must be greater than 0'
++        );
++    }
++
++    /**
++     * \Sodium\randombytes_buf() doesn't allow more than 2147483647 bytes to be
++     * generated in one invocation.
++     */
++    if ($bytes > 2147483647) {
++        $buf = '';
++        for ($i = 0; $i < $bytes; $i += 1073741824) {
++            $n = ($bytes - $i) > 1073741824
++                ? 1073741824
++                : $bytes - $i;
++            $buf .= \Sodium\randombytes_buf($n);
++        }
++    } else {
++        $buf = \Sodium\randombytes_buf($bytes);
++    }
++
++    if ($buf !== false) {
++        if (RandomCompat_strlen($buf) === $bytes) {
++            return $buf;
++        }
++    }
++
++    /**
++     * If we reach here, PHP has failed us.
++     */
++    throw new Exception(
++        'Could not gather sufficient random data'
++    );
++}
+diff --git a/phproad/thirdpart/random_compat/lib/random_bytes_libsodium_legacy.php b/phproad/thirdpart/random_compat/lib/random_bytes_libsodium_legacy.php
+new file mode 100644
+index 0000000..44fddbf
+--- /dev/null
++++ b/phproad/thirdpart/random_compat/lib/random_bytes_libsodium_legacy.php
+@@ -0,0 +1,86 @@
++<?php
++/**
++ * Random_* Compatibility Library 
++ * for using the new PHP 7 random_* API in PHP 5 projects
++ * 
++ * The MIT License (MIT)
++ * 
++ * Copyright (c) 2015 Paragon Initiative Enterprises
++ * 
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ * 
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ * 
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
++ * SOFTWARE.
++ */
++
++/**
++ * If the libsodium PHP extension is loaded, we'll use it above any other
++ * solution.
++ *
++ * libsodium-php project:
++ * @ref https://github.com/jedisct1/libsodium-php
++ *
++ * @param int $bytes
++ *
++ * @throws Exception
++ *
++ * @return string
++ */
++function random_bytes($bytes)
++{
++    try {
++        $bytes = RandomCompat_intval($bytes);
++    } catch (TypeError $ex) {
++        throw new TypeError(
++            'random_bytes(): $bytes must be an integer'
++        );
++    }
++
++    if ($bytes < 1) {
++        throw new Error(
++            'Length must be greater than 0'
++        );
++    }
++
++    /**
++     * \Sodium\randombytes_buf() doesn't allow more than 2147483647 bytes to be
++     * generated in one invocation.
++     */
++    if ($bytes > 2147483647) {
++        $buf = '';
++        for ($i = 0; $i < $bytes; $i += 1073741824) {
++            $n = ($bytes - $i) > 1073741824
++                ? 1073741824
++                : $bytes - $i;
++            $buf .= Sodium::randombytes_buf($n);
++        }
++    } else {
++        $buf = Sodium::randombytes_buf($bytes);
++    }
++
++    if ($buf !== false) {
++        if (RandomCompat_strlen($buf) === $bytes) {
++            return $buf;
++        }
++    }
++
++    /**
++     * If we reach here, PHP has failed us.
++     */
++    throw new Exception(
++        'Could not gather sufficient random data'
++    );
++}
+diff --git a/phproad/thirdpart/random_compat/lib/random_bytes_mcrypt.php b/phproad/thirdpart/random_compat/lib/random_bytes_mcrypt.php
+new file mode 100644
+index 0000000..7ac9d91
+--- /dev/null
++++ b/phproad/thirdpart/random_compat/lib/random_bytes_mcrypt.php
+@@ -0,0 +1,76 @@
++<?php
++/**
++ * Random_* Compatibility Library 
++ * for using the new PHP 7 random_* API in PHP 5 projects
++ * 
++ * The MIT License (MIT)
++ * 
++ * Copyright (c) 2015 Paragon Initiative Enterprises
++ * 
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ * 
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ * 
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
++ * SOFTWARE.
++ */
++
++
++/**
++ * Powered by ext/mcrypt (and thankfully NOT libmcrypt)
++ * 
++ * @ref https://bugs.php.net/bug.php?id=55169
++ * @ref https://github.com/php/php-src/blob/c568ffe5171d942161fc8dda066bce844bdef676/ext/mcrypt/mcrypt.c#L1321-L1386
++ * 
++ * @param int $bytes
++ * 
++ * @throws Exception
++ * 
++ * @return string
++ */
++function random_bytes($bytes)
++{
++    try {
++        $bytes = RandomCompat_intval($bytes);
++    } catch (TypeError $ex) {
++        throw new TypeError(
++            'random_bytes(): $bytes must be an integer'
++        );
++    }
++
++    if ($bytes < 1) {
++        throw new Error(
++            'Length must be greater than 0'
++        );
++    }
++
++    $buf = @mcrypt_create_iv($bytes, MCRYPT_DEV_URANDOM);
++    if (
++        $buf !== false
++        &&
++        RandomCompat_strlen($buf) === $bytes
++    ) {
++        /**
++         * Return our random entropy buffer here:
++         */
++        return $buf;
++    }
++
++    /**
++     * If we reach here, PHP has failed us.
++     */
++    throw new Exception(
++        'Could not gather sufficient random data'
++    );
++}
+diff --git a/phproad/thirdpart/random_compat/lib/random_int.php b/phproad/thirdpart/random_compat/lib/random_int.php
+new file mode 100644
+index 0000000..fd3ef87
+--- /dev/null
++++ b/phproad/thirdpart/random_compat/lib/random_int.php
+@@ -0,0 +1,191 @@
++<?php
++/**
++ * Random_* Compatibility Library 
++ * for using the new PHP 7 random_* API in PHP 5 projects
++ * 
++ * The MIT License (MIT)
++ * 
++ * Copyright (c) 2015 Paragon Initiative Enterprises
++ * 
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ * 
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ * 
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
++ * SOFTWARE.
++ */
++
++/**
++ * Fetch a random integer between $min and $max inclusive
++ * 
++ * @param int $min
++ * @param int $max
++ * 
++ * @throws Exception
++ * 
++ * @return int
++ */
++function random_int($min, $max)
++{
++    /**
++     * Type and input logic checks
++     * 
++     * If you pass it a float in the range (~PHP_INT_MAX, PHP_INT_MAX)
++     * (non-inclusive), it will sanely cast it to an int. If you it's equal to
++     * ~PHP_INT_MAX or PHP_INT_MAX, we let it fail as not an integer. Floats 
++     * lose precision, so the <= and => operators might accidentally let a float
++     * through.
++     */
++    
++    try {
++        $min = RandomCompat_intval($min);
++    } catch (TypeError $ex) {
++        throw new TypeError(
++            'random_int(): $min must be an integer'
++        );
++    }
++
++    try {
++        $max = RandomCompat_intval($max);
++    } catch (TypeError $ex) {
++        throw new TypeError(
++            'random_int(): $max must be an integer'
++        );
++    }
++    
++    /**
++     * Now that we've verified our weak typing system has given us an integer,
++     * let's validate the logic then we can move forward with generating random
++     * integers along a given range.
++     */
++    if ($min > $max) {
++        throw new Error(
++            'Minimum value must be less than or equal to the maximum value'
++        );
++    }
++
++    if ($max === $min) {
++        return $min;
++    }
++
++    /**
++     * Initialize variables to 0
++     * 
++     * We want to store:
++     * $bytes => the number of random bytes we need
++     * $mask => an integer bitmask (for use with the &) operator
++     *          so we can minimize the number of discards
++     */
++    $attempts = $bits = $bytes = $mask = $valueShift = 0;
++
++    /**
++     * At this point, $range is a positive number greater than 0. It might
++     * overflow, however, if $max - $min > PHP_INT_MAX. PHP will cast it to
++     * a float and we will lose some precision.
++     */
++    $range = $max - $min;
++
++    /**
++     * Test for integer overflow:
++     */
++    if (!is_int($range)) {
++
++        /**
++         * Still safely calculate wider ranges.
++         * Provided by @CodesInChaos, @oittaa
++         * 
++         * @ref https://gist.github.com/CodesInChaos/03f9ea0b58e8b2b8d435
++         * 
++         * We use ~0 as a mask in this case because it generates all 1s
++         * 
++         * @ref https://eval.in/400356 (32-bit)
++         * @ref http://3v4l.org/XX9r5  (64-bit)
++         */
++        $bytes = PHP_INT_SIZE;
++        $mask = ~0;
++
++    } else {
++
++        /**
++         * $bits is effectively ceil(log($range, 2)) without dealing with 
++         * type juggling
++         */
++        while ($range > 0) {
++            if ($bits % 8 === 0) {
++               ++$bytes;
++            }
++            ++$bits;
++            $range >>= 1;
++            $mask = $mask << 1 | 1;
++        }
++        $valueShift = $min;
++    }
++
++    /**
++     * Now that we have our parameters set up, let's begin generating
++     * random integers until one falls between $min and $max
++     */
++    do {
++        /**
++         * The rejection probability is at most 0.5, so this corresponds
++         * to a failure probability of 2^-128 for a working RNG
++         */
++        if ($attempts > 128) {
++            throw new Exception(
++                'random_int: RNG is broken - too many rejections'
++            );
++        }
++
++        /**
++         * Let's grab the necessary number of random bytes
++         */
++        $randomByteString = random_bytes($bytes);
++        if ($randomByteString === false) {
++            throw new Exception(
++                'Random number generator failure'
++            );
++        }
++
++        /**
++         * Let's turn $randomByteString into an integer
++         * 
++         * This uses bitwise operators (<< and |) to build an integer
++         * out of the values extracted from ord()
++         * 
++         * Example: [9F] | [6D] | [32] | [0C] =>
++         *   159 + 27904 + 3276800 + 201326592 =>
++         *   204631455
++         */
++        $val = 0;
++        for ($i = 0; $i < $bytes; ++$i) {
++            $val |= ord($randomByteString[$i]) << ($i * 8);
++        }
++
++        /**
++         * Apply mask
++         */
++        $val &= $mask;
++        $val += $valueShift;
++
++        ++$attempts;
++        /**
++         * If $val overflows to a floating point number,
++         * ... or is larger than $max,
++         * ... or smaller than $min,
++         * then try again.
++         */
++    } while (!is_int($val) || $val > $max || $val < $min);
++
++    return (int) $val;
++}
+diff --git a/phproad/thirdpart/random_compat/other/build_phar.php b/phproad/thirdpart/random_compat/other/build_phar.php
+new file mode 100644
+index 0000000..70ef4b2
+--- /dev/null
++++ b/phproad/thirdpart/random_compat/other/build_phar.php
+@@ -0,0 +1,57 @@
++<?php
++$dist = dirname(__DIR__).'/dist';
++if (!is_dir($dist)) {
++    mkdir($dist, 0755);
++}
++if (file_exists($dist.'/random_compat.phar')) {
++    unlink($dist.'/random_compat.phar');
++}
++$phar = new Phar(
++    $dist.'/random_compat.phar',
++    FilesystemIterator::CURRENT_AS_FILEINFO | \FilesystemIterator::KEY_AS_FILENAME,
++    'random_compat.phar'
++);
++rename(
++    dirname(__DIR__).'/lib/random.php', 
++    dirname(__DIR__).'/lib/index.php'
++);
++$phar->buildFromDirectory(dirname(__DIR__).'/lib');
++rename(
++    dirname(__DIR__).'/lib/index.php', 
++    dirname(__DIR__).'/lib/random.php'
++);
++
++/**
++ * If we pass an (optional) path to a private key as a second argument, we will
++ * sign the Phar with OpenSSL.
++ * 
++ * If you leave this out, it will produce an unsigned .phar!
++ */
++if ($argc > 1) {
++    if (!@is_readable($argv[1])) {
++        echo 'Could not read the private key file:', $argv[1], "\n";
++        exit(255);
++    }
++    $pkeyFile = file_get_contents($argv[1]);
++    
++    $private = openssl_get_privatekey($pkeyFile);
++    if ($private !== false) {
++        $pkey = '';
++        openssl_pkey_export($private, $pkey);
++        $phar->setSignatureAlgorithm(Phar::OPENSSL, $pkey);
++        
++        /**
++         * Save the corresponding public key to the file
++         */
++        if (!@is_readable($dist.'/random_compat.phar.pubkey')) {
++            $details = openssl_pkey_get_details($private);
++            file_put_contents(
++                $dist.'/random_compat.phar.pubkey',
++                $details['key']
++            );
++        }
++    } else {
++        echo 'An error occurred reading the private key from OpenSSL.', "\n";
++        exit(255);
++    }
++}
+-- 
+2.8.1
+
