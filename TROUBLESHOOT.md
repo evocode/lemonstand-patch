@@ -43,9 +43,7 @@ Missing configuration value (COOKIE_SALT)
 
 Resolution:
 
-```
-Login to the backend twice.
-If error continues, create COOKIE_SALT manually (at least 10 characters) and set in config/keys.php.
-```
+Login to the backend twice. If error continues, try one of the following:
 
-The error happens when the update process was unable to generate a cryptogragraphically secure `COOKIE_SALT` on your server. The solution is to manually create a `COOKIE_SALT` in `config/keys.php` of at least 10 characters.
+- Use bundled salt generator: `php src/generate-keys.php` and add them to `config/keys.php` or `config/config.php`.
+- Create `COOKIE_SALT` manually by picking random characters and symbols of at least 10 characters and set in `config/keys.php` or `config/config.php`.
